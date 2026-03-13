@@ -198,10 +198,9 @@ packages:
   flutter_tex:
     dependency: "direct main"
     description:
-      name: flutter_tex
-      sha256: "05df1f862832a3785640ff0377863b26bde85a2fac8edad532a179226e5888c5"
-      url: "https://pub.dev"
-    source: hosted
+      path: "packages/flutter_tex"
+      relative: true
+    source: path
     version: "4.1.3"
   flutter_web_plugins:
     dependency: transitive
