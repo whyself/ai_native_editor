@@ -160,7 +160,6 @@ class _WelcomePane extends StatelessWidget {
   Widget build(BuildContext context) {
     final bg = isDark ? AppColors.darkBackground : AppColors.lightBackground;
     final textMuted = isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted;
-    final primary = isDark ? AppColors.darkPrimary : AppColors.lightPrimary;
     return Container(
       color: bg,
       child: Center(

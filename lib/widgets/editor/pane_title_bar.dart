@@ -124,10 +124,7 @@ class _SegmentedControl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final primary = isDark ? AppColors.darkPrimary : AppColors.lightPrimary;
     final surface3 = isDark ? AppColors.darkSurface3 : AppColors.lightSurface3;
-    final textPrimary = isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
-    final textSecondary = isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
     final borderColor = isDark ? AppColors.darkBorder : AppColors.lightBorder;
 
     return Container(
@@ -174,7 +171,6 @@ class _Segment extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final primary = isDark ? AppColors.darkPrimary : AppColors.lightPrimary;
-    final textPrimary = isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
     final textSecondary = isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
     final surface2 = isDark ? AppColors.darkSurface2 : AppColors.lightSurface2;
 

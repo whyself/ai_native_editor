@@ -44,7 +44,6 @@ class _AiPanelState extends ConsumerState<AiPanel> {
   @override
   Widget build(BuildContext context) {
     final chat = ref.watch(chatProvider);
-    final settings = ref.watch(settingsProvider);
     final surface = isDark ? AppColors.darkSurface1 : AppColors.lightSurface1;
     final surface2 = isDark ? AppColors.darkSurface2 : AppColors.lightSurface2;
     final border = isDark ? AppColors.darkBorderSubtle : AppColors.lightBorderSubtle;
@@ -221,7 +220,6 @@ class _ModelSelector extends ConsumerWidget {
     final settings = ref.watch(settingsProvider);
     final textSecondary =
         isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
-    final surface3 = isDark ? AppColors.darkSurface3 : AppColors.lightSurface3;
 
     return DropdownButtonHideUnderline(
       child: DropdownButton<String>(

@@ -91,8 +91,6 @@ class _MarkdownEditorState extends State<MarkdownEditor> {
         widget.isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
     final caretColor =
         widget.isDark ? AppColors.darkPrimary : AppColors.lightPrimary;
-    final selectionColor =
-        widget.isDark ? AppColors.darkPrimary.withOpacity(0.3) : AppColors.lightPrimary.withOpacity(0.2);
 
     if (!_loaded) {
       return Center(

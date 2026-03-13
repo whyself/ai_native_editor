@@ -132,7 +132,7 @@ class _TopBar extends ConsumerWidget {
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                color: secondary,
                 letterSpacing: 0.2,
               ),
             ),
