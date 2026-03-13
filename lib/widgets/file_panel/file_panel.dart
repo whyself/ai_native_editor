@@ -62,12 +62,28 @@ class FilePanel extends ConsumerWidget {
                   padding: const EdgeInsets.symmetric(vertical: AppTheme.sp4),
                   itemCount: files.length,
                   itemBuilder: (context, index) {
+                    final filePath = files[index].path;
                     return FileListItem(
                       file: files[index],
                       isDark: isDark,
                       onRemove: () => ref
                           .read(workspaceProvider.notifier)
-                          .removeFile(files[index].path),
+                          .removeFile(filePath),
+                      onOpen: () {
+                        // 单击打开：优先空 leaf，否则使用第一个 leaf
+                        final paneTree = ref.read(paneTreeProvider);
+                        final leafIds = collectLeafIds(paneTree);
+                        if (leafIds.isEmpty) return;
+                        String targetId = leafIds.first;
+                        for (final id in leafIds) {
+                          final node = findNode(paneTree, id);
+                          if (node is LeafNode && node.filePath == null) {
+                            targetId = id;
+                            break;
+                          }
+                        }
+                        ref.read(paneTreeProvider.notifier).openFile(targetId, filePath);
+                      },
                     );
                   },
                 ),
@@ -287,12 +303,14 @@ class FileListItem extends StatelessWidget {
   final WorkspaceFile file;
   final bool isDark;
   final VoidCallback onRemove;
+  final VoidCallback onOpen;
 
   const FileListItem({
     super.key,
     required this.file,
     required this.isDark,
     required this.onRemove,
+    required this.onOpen,
   });
 
   @override
@@ -304,7 +322,8 @@ class FileListItem extends StatelessWidget {
 
     return LongPressDraggable<DragPayload>(
       data: FilePathPayload(file.path),
-      delay: const Duration(milliseconds: 300),
+      delay: const Duration(milliseconds: 400),
+      dragAnchorStrategy: pointerDragAnchorStrategy,
       feedback: Material(
         color: Colors.transparent,
         child: Container(
@@ -351,6 +370,7 @@ class FileListItem extends StatelessWidget {
         textPrimary: textPrimary,
         textMuted: textMuted,
         onRemove: onRemove,
+        onOpen: onOpen,
       ),
     );
   }
@@ -362,6 +382,7 @@ class _ItemContent extends StatefulWidget {
   final Color textPrimary;
   final Color textMuted;
   final VoidCallback? onRemove;
+  final VoidCallback? onOpen;
 
   const _ItemContent({
     required this.file,
@@ -369,6 +390,7 @@ class _ItemContent extends StatefulWidget {
     required this.textPrimary,
     required this.textMuted,
     this.onRemove,
+    this.onOpen,
   });
 
   @override
@@ -383,40 +405,44 @@ class _ItemContentState extends State<_ItemContent> {
     final hoverColor =
         widget.isDark ? AppColors.darkSurface3 : AppColors.lightSurface3;
 
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: Container(
-        height: 36,
-        padding: const EdgeInsets.symmetric(horizontal: AppTheme.sp12),
-        color: _hovered ? hoverColor : Colors.transparent,
-        child: Row(
-          children: [
-            Icon(
-              Icons.description_outlined,
-              size: 14,
-              color: widget.isDark
-                  ? AppColors.darkTextMuted
-                  : AppColors.lightTextMuted,
-            ),
-            const SizedBox(width: AppTheme.sp8),
-            Expanded(
-              child: Text(
-                widget.file.name,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: widget.textPrimary,
-                  overflow: TextOverflow.ellipsis,
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: widget.onOpen,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: Container(
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: AppTheme.sp12),
+          color: _hovered ? hoverColor : Colors.transparent,
+          child: Row(
+            children: [
+              Icon(
+                Icons.description_outlined,
+                size: 14,
+                color: widget.isDark
+                    ? AppColors.darkTextMuted
+                    : AppColors.lightTextMuted,
+              ),
+              const SizedBox(width: AppTheme.sp8),
+              Expanded(
+                child: Text(
+                  widget.file.name,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: widget.textPrimary,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
-            ),
-            if (_hovered && widget.onRemove != null)
-              GestureDetector(
-                onTap: widget.onRemove,
-                child:
-                    Icon(Icons.close, size: 14, color: widget.textMuted),
-              ),
-          ],
+              if (_hovered && widget.onRemove != null)
+                GestureDetector(
+                  onTap: widget.onRemove,
+                  child:
+                      Icon(Icons.close, size: 14, color: widget.textMuted),
+                ),
+            ],
+          ),
         ),
       ),
     );

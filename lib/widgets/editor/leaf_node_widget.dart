@@ -73,7 +73,8 @@ class _LeafNodeWidgetState extends ConsumerState<LeafNodeWidget> {
                   // Title bar (long-press draggable)
                   LongPressDraggable<DragPayload>(
                     data: PanePayload(leaf.id),
-                    delay: const Duration(milliseconds: 300),
+                    delay: const Duration(milliseconds: 400),
+                    dragAnchorStrategy: pointerDragAnchorStrategy,
                     feedback: Material(
                       color: Colors.transparent,
                       child: Container(
