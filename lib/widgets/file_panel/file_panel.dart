@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import '../../models/drag_payload.dart';
 import '../../models/pane_node.dart';
 import '../../models/workspace_file.dart';
@@ -113,13 +114,9 @@ class _NewFileButton extends ConsumerWidget {
     final name =
         filename.trim().endsWith('.md') ? filename.trim() : '${filename.trim()}.md';
 
-    // 2. Let user pick a directory (SAF picker, works on Android)
-    final directory = await FilePicker.platform.getDirectoryPath(
-      dialogTitle: '选择保存位置',
-    );
-    if (directory == null) return; // user cancelled
-
-    final finalPath = p.join(directory, name);
+    // 2. 保存到应用文档目录（无需任何 Android 权限，始终可写）
+    final docsDir = await getApplicationDocumentsDirectory();
+    final finalPath = p.join(docsDir.path, name);
 
     // 3. Write default content
     const defaultContent = '# 新文档\n\n';
@@ -136,6 +133,16 @@ class _NewFileButton extends ConsumerWidget {
 
     // 4. Add to workspace
     ref.read(workspaceProvider.notifier).addFiles([finalPath]);
+
+    // Show success snackbar with save path
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('已创建：$finalPath'),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
 
     // 5. Open in editor: prefer empty leaf, otherwise open in first leaf
     final paneTree = ref.read(paneTreeProvider);
@@ -225,7 +232,7 @@ class _NewFileButton extends ConsumerWidget {
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(AppTheme.radius6)),
               ),
-              child: const Text('创建并选择位置'),
+              child: const Text('创建'),
             ),
           ],
         );
