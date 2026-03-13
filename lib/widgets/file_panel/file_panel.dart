@@ -15,14 +15,40 @@ import '../../theme/app_theme.dart';
 class FilePanel extends ConsumerWidget {
   const FilePanel({super.key});
 
+  /// Open [filePath] in the editor:
+  /// - if the first leaf is empty → openFile (replace)
+  /// - otherwise → split alongside first leaf (add as right sibling)
+  void _openOrSplit(WidgetRef ref, String filePath) {
+    final paneTree = ref.read(paneTreeProvider);
+    final leafIds = collectLeafIds(paneTree);
+    if (leafIds.isEmpty) return;
+    final firstLeaf = findNode(paneTree, leafIds.first);
+    if (firstLeaf is LeafNode && firstLeaf.filePath == null) {
+      ref.read(paneTreeProvider.notifier).openFile(leafIds.first, filePath);
+    } else {
+      ref
+          .read(paneTreeProvider.notifier)
+          .splitWithFile(leafIds.first, filePath, DropZone.right);
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final files = ref.watch(workspaceProvider);
+    final paneTree = ref.watch(paneTreeProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textSecondary =
         isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
     final borderColor =
         isDark ? AppColors.darkBorderSubtle : AppColors.lightBorderSubtle;
+
+    // Build set of file paths currently open in any leaf.
+    final openPaths = collectLeafIds(paneTree)
+        .map((id) => findNode(paneTree, id))
+        .whereType<LeafNode>()
+        .where((n) => n.filePath != null)
+        .map((n) => n.filePath!)
+        .toSet();
 
     return Column(
       children: [
@@ -66,24 +92,11 @@ class FilePanel extends ConsumerWidget {
                     return FileListItem(
                       file: files[index],
                       isDark: isDark,
+                      isOpen: openPaths.contains(filePath),
                       onRemove: () => ref
                           .read(workspaceProvider.notifier)
                           .removeFile(filePath),
-                      onOpen: () {
-                        // 单击打开：优先空 leaf，否则使用第一个 leaf
-                        final paneTree = ref.read(paneTreeProvider);
-                        final leafIds = collectLeafIds(paneTree);
-                        if (leafIds.isEmpty) return;
-                        String targetId = leafIds.first;
-                        for (final id in leafIds) {
-                          final node = findNode(paneTree, id);
-                          if (node is LeafNode && node.filePath == null) {
-                            targetId = id;
-                            break;
-                          }
-                        }
-                        ref.read(paneTreeProvider.notifier).openFile(targetId, filePath);
-                      },
+                      onOpen: () => _openOrSplit(ref, filePath),
                     );
                   },
                 ),
@@ -160,21 +173,18 @@ class _NewFileButton extends ConsumerWidget {
       );
     }
 
-    // 5. Open in editor: prefer empty leaf, otherwise open in first leaf
+    // 5. Open in editor: empty first leaf → replace, otherwise → sibling split
     final paneTree = ref.read(paneTreeProvider);
     final leafIds = collectLeafIds(paneTree);
-
     if (leafIds.isNotEmpty) {
-      // Find an empty leaf (filePath == null) to open in; fallback to first
-      String targetId = leafIds.first;
-      for (final id in leafIds) {
-        final node = findNode(paneTree, id);
-        if (node is LeafNode && node.filePath == null) {
-          targetId = id;
-          break;
-        }
+      final firstLeaf = findNode(paneTree, leafIds.first);
+      if (firstLeaf is LeafNode && firstLeaf.filePath == null) {
+        ref.read(paneTreeProvider.notifier).openFile(leafIds.first, finalPath);
+      } else {
+        ref
+            .read(paneTreeProvider.notifier)
+            .splitWithFile(leafIds.first, finalPath, DropZone.right);
       }
-      ref.read(paneTreeProvider.notifier).openFile(targetId, finalPath);
     }
   }
 
@@ -302,6 +312,7 @@ class _AddFileButton extends ConsumerWidget {
 class FileListItem extends StatelessWidget {
   final WorkspaceFile file;
   final bool isDark;
+  final bool isOpen;
   final VoidCallback onRemove;
   final VoidCallback onOpen;
 
@@ -309,6 +320,7 @@ class FileListItem extends StatelessWidget {
     super.key,
     required this.file,
     required this.isDark,
+    required this.isOpen,
     required this.onRemove,
     required this.onOpen,
   });
@@ -361,12 +373,14 @@ class FileListItem extends StatelessWidget {
         child: _ItemContent(
             file: file,
             isDark: isDark,
+            isOpen: isOpen,
             textPrimary: textPrimary,
             textMuted: textMuted),
       ),
       child: _ItemContent(
         file: file,
         isDark: isDark,
+        isOpen: isOpen,
         textPrimary: textPrimary,
         textMuted: textMuted,
         onRemove: onRemove,
@@ -379,6 +393,7 @@ class FileListItem extends StatelessWidget {
 class _ItemContent extends StatefulWidget {
   final WorkspaceFile file;
   final bool isDark;
+  final bool isOpen;
   final Color textPrimary;
   final Color textMuted;
   final VoidCallback? onRemove;
@@ -387,6 +402,7 @@ class _ItemContent extends StatefulWidget {
   const _ItemContent({
     required this.file,
     required this.isDark,
+    required this.isOpen,
     required this.textPrimary,
     required this.textMuted,
     this.onRemove,
@@ -404,6 +420,9 @@ class _ItemContentState extends State<_ItemContent> {
   Widget build(BuildContext context) {
     final hoverColor =
         widget.isDark ? AppColors.darkSurface3 : AppColors.lightSurface3;
+    final primary =
+        widget.isDark ? AppColors.darkPrimary : AppColors.lightPrimary;
+    final openBg = primary.withOpacity(0.08);
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -413,16 +432,30 @@ class _ItemContentState extends State<_ItemContent> {
         onExit: (_) => setState(() => _hovered = false),
         child: Container(
           height: 36,
-          padding: const EdgeInsets.symmetric(horizontal: AppTheme.sp12),
-          color: _hovered ? hoverColor : Colors.transparent,
+          decoration: BoxDecoration(
+            color: widget.isOpen
+                ? openBg
+                : (_hovered ? hoverColor : Colors.transparent),
+            border: widget.isOpen
+                ? Border(
+                    left: BorderSide(color: primary, width: 2),
+                  )
+                : null,
+          ),
+          padding: EdgeInsets.only(
+            left: widget.isOpen ? AppTheme.sp12 - 2 : AppTheme.sp12,
+            right: AppTheme.sp12,
+          ),
           child: Row(
             children: [
               Icon(
                 Icons.description_outlined,
                 size: 14,
-                color: widget.isDark
-                    ? AppColors.darkTextMuted
-                    : AppColors.lightTextMuted,
+                color: widget.isOpen
+                    ? primary
+                    : (widget.isDark
+                        ? AppColors.darkTextMuted
+                        : AppColors.lightTextMuted),
               ),
               const SizedBox(width: AppTheme.sp8),
               Expanded(
@@ -430,7 +463,10 @@ class _ItemContentState extends State<_ItemContent> {
                   widget.file.name,
                   style: TextStyle(
                     fontSize: 13,
-                    color: widget.textPrimary,
+                    fontWeight: widget.isOpen
+                        ? FontWeight.w600
+                        : FontWeight.w400,
+                    color: widget.isOpen ? primary : widget.textPrimary,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -438,8 +474,7 @@ class _ItemContentState extends State<_ItemContent> {
               if (_hovered && widget.onRemove != null)
                 GestureDetector(
                   onTap: widget.onRemove,
-                  child:
-                      Icon(Icons.close, size: 14, color: widget.textMuted),
+                  child: Icon(Icons.close, size: 14, color: widget.textMuted),
                 ),
             ],
           ),

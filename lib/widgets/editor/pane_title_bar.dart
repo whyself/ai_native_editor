@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../models/drag_payload.dart';
 import '../../models/pane_node.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_theme.dart';
@@ -9,6 +10,7 @@ class PaneTitleBar extends StatelessWidget {
   final VoidCallback onTogglePreview;
   final VoidCallback onOpenPreview;
   final VoidCallback onUndo;
+  final VoidCallback? onSave;
   final bool isDark;
 
   const PaneTitleBar({
@@ -18,15 +20,19 @@ class PaneTitleBar extends StatelessWidget {
     required this.onTogglePreview,
     required this.onOpenPreview,
     required this.onUndo,
+    this.onSave,
     required this.isDark,
   });
 
   @override
   Widget build(BuildContext context) {
     final surface = isDark ? AppColors.darkSurface2 : AppColors.lightSurface2;
-    final border = isDark ? AppColors.darkBorderSubtle : AppColors.lightBorderSubtle;
-    final textPrimary = isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
-    final textSecondary = isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
+    final border =
+        isDark ? AppColors.darkBorderSubtle : AppColors.lightBorderSubtle;
+    final textPrimary =
+        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
+    final textSecondary =
+        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
     final primary = isDark ? AppColors.darkPrimary : AppColors.lightPrimary;
 
     return Container(
@@ -37,39 +43,108 @@ class PaneTitleBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // File name (draggable handle - long-press)
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppTheme.sp12),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.description_outlined,
-                    size: 14,
-                    color: textSecondary,
+          // ── Pane drag handle (long-press → reorder pane) ──────────────
+          LongPressDraggable<DragPayload>(
+            data: PanePayload(leaf.id),
+            delay: const Duration(milliseconds: 400),
+            dragAnchorStrategy: pointerDragAnchorStrategy,
+            feedback: Material(
+              color: Colors.transparent,
+              child: Container(
+                width: 200,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? AppColors.darkSurface3
+                      : AppColors.lightSurface3,
+                  borderRadius: BorderRadius.circular(AppTheme.radius6),
+                  border: Border.all(color: primary),
+                ),
+                child: Text(
+                  leaf.displayName,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: textPrimary,
+                    decoration: TextDecoration.none,
                   ),
-                  const SizedBox(width: AppTheme.sp6),
-                  Flexible(
-                    child: Text(
-                      leaf.hasUnsavedChanges
-                          ? '${leaf.displayName} ●'
-                          : leaf.displayName,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: leaf.hasUnsavedChanges ? primary : textPrimary,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
+            ),
+            child: Container(
+              width: 28,
+              height: 40,
+              alignment: Alignment.center,
+              child: Icon(Icons.drag_indicator,
+                  size: 16, color: textSecondary.withOpacity(0.5)),
             ),
           ),
 
-          // Source / Rendered toggle (only for markdown)
-          if (leaf.filePath != null && leaf.contentType == ContentType.markdown)
+          // ── File icon + name (long-press → drag to AI chat) ───────────
+          Expanded(
+            child: leaf.filePath != null
+                ? LongPressDraggable<DragPayload>(
+                    data: FilePathPayload(leaf.filePath!),
+                    delay: const Duration(milliseconds: 400),
+                    dragAnchorStrategy: pointerDragAnchorStrategy,
+                    feedback: Material(
+                      color: Colors.transparent,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? AppColors.darkAiAccent.withOpacity(0.15)
+                              : AppColors.lightAiAccent.withOpacity(0.15),
+                          borderRadius:
+                              BorderRadius.circular(AppTheme.radius6),
+                          border: Border.all(
+                            color: isDark
+                                ? AppColors.darkAiAccent
+                                : AppColors.lightAiAccent,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.description_outlined,
+                                size: 12,
+                                color: isDark
+                                    ? AppColors.darkAiAccent
+                                    : AppColors.lightAiAccent),
+                            const SizedBox(width: 4),
+                            Text(
+                              leaf.displayName,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isDark
+                                    ? AppColors.darkAiAccent
+                                    : AppColors.lightAiAccent,
+                                decoration: TextDecoration.none,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    child: _FileNameArea(
+                        leaf: leaf,
+                        isDark: isDark,
+                        textSecondary: textSecondary,
+                        textPrimary: textPrimary,
+                        primary: primary),
+                  )
+                : _FileNameArea(
+                    leaf: leaf,
+                    isDark: isDark,
+                    textSecondary: textSecondary,
+                    textPrimary: textPrimary,
+                    primary: primary),
+          ),
+
+          // ── Source / Rendered toggle ───────────────────────────────────
+          if (leaf.filePath != null &&
+              leaf.contentType == ContentType.markdown)
             _SegmentedControl(
               isPreview: leaf.isPreviewMode,
               onToggle: onTogglePreview,
@@ -78,7 +153,19 @@ class PaneTitleBar extends StatelessWidget {
 
           const SizedBox(width: AppTheme.sp4),
 
-          // Undo button
+          // ── Save button (only when dirty) ─────────────────────────────
+          if (leaf.hasUnsavedChanges &&
+              !leaf.isPreviewMode &&
+              leaf.filePath != null)
+            _TitleBarBtn(
+              icon: Icons.save_outlined,
+              tooltip: '保存 (Ctrl+S)',
+              onTap: onSave ?? () {},
+              isDark: isDark,
+              color: primary,
+            ),
+
+          // ── Undo button ───────────────────────────────────────────────
           if (!leaf.isPreviewMode && leaf.filePath != null)
             _TitleBarBtn(
               icon: Icons.undo,
@@ -87,8 +174,9 @@ class PaneTitleBar extends StatelessWidget {
               isDark: isDark,
             ),
 
-          // Open preview pane
-          if (leaf.filePath != null && leaf.contentType == ContentType.markdown)
+          // ── Open preview pane ─────────────────────────────────────────
+          if (leaf.filePath != null &&
+              leaf.contentType == ContentType.markdown)
             _TitleBarBtn(
               icon: Icons.call_split_outlined,
               tooltip: '新建预览窗口',
@@ -96,7 +184,7 @@ class PaneTitleBar extends StatelessWidget {
               isDark: isDark,
             ),
 
-          // Close button
+          // ── Close button ──────────────────────────────────────────────
           _TitleBarBtn(
             icon: Icons.close,
             tooltip: '关闭',
@@ -111,6 +199,58 @@ class PaneTitleBar extends StatelessWidget {
   }
 }
 
+// ── File name area ────────────────────────────────────────────────────────────
+
+class _FileNameArea extends StatelessWidget {
+  final LeafNode leaf;
+  final bool isDark;
+  final Color textSecondary;
+  final Color textPrimary;
+  final Color primary;
+
+  const _FileNameArea({
+    required this.leaf,
+    required this.isDark,
+    required this.textSecondary,
+    required this.textPrimary,
+    required this.primary,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding:
+          const EdgeInsets.symmetric(horizontal: AppTheme.sp8),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.description_outlined,
+            size: 14,
+            color: textSecondary,
+          ),
+          const SizedBox(width: AppTheme.sp6),
+          Flexible(
+            child: Text(
+              leaf.hasUnsavedChanges
+                  ? '${leaf.displayName} ●'
+                  : leaf.displayName,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: leaf.hasUnsavedChanges ? primary : textPrimary,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Segmented control ─────────────────────────────────────────────────────────
+
 class _SegmentedControl extends StatelessWidget {
   final bool isPreview;
   final VoidCallback onToggle;
@@ -124,7 +264,8 @@ class _SegmentedControl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final surface3 = isDark ? AppColors.darkSurface3 : AppColors.lightSurface3;
+    final surface3 =
+        isDark ? AppColors.darkSurface3 : AppColors.lightSurface3;
     final borderColor = isDark ? AppColors.darkBorder : AppColors.lightBorder;
 
     return Container(
@@ -171,7 +312,8 @@ class _Segment extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final primary = isDark ? AppColors.darkPrimary : AppColors.lightPrimary;
-    final textSecondary = isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
+    final textSecondary =
+        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
     final surface2 = isDark ? AppColors.darkSurface2 : AppColors.lightSurface2;
 
     return GestureDetector(
@@ -196,22 +338,27 @@ class _Segment extends StatelessWidget {
   }
 }
 
+// ── Title bar button ──────────────────────────────────────────────────────────
+
 class _TitleBarBtn extends StatelessWidget {
   final IconData icon;
   final String tooltip;
   final VoidCallback onTap;
   final bool isDark;
+  final Color? color;
 
   const _TitleBarBtn({
     required this.icon,
     required this.tooltip,
     required this.onTap,
     required this.isDark,
+    this.color,
   });
 
   @override
   Widget build(BuildContext context) {
-    final textSecondary = isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
+    final textSecondary =
+        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
     return Tooltip(
       message: tooltip,
       child: GestureDetector(
@@ -220,7 +367,7 @@ class _TitleBarBtn extends StatelessWidget {
           width: 36,
           height: 36,
           alignment: Alignment.center,
-          child: Icon(icon, size: 16, color: textSecondary),
+          child: Icon(icon, size: 16, color: color ?? textSecondary),
         ),
       ),
     );

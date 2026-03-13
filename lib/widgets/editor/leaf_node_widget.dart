@@ -21,6 +21,8 @@ class LeafNodeWidget extends ConsumerStatefulWidget {
 
 class _LeafNodeWidgetState extends ConsumerState<LeafNodeWidget> {
   DropZone? _hoverZone;
+  // GlobalKey lets the title-bar save button reach into the editor's save().
+  final _editorKey = GlobalKey<MarkdownEditorState>();
 
   bool get isDark => Theme.of(context).brightness == Brightness.dark;
 
@@ -70,44 +72,8 @@ class _LeafNodeWidgetState extends ConsumerState<LeafNodeWidget> {
               // Main content column
               Column(
                 children: [
-                  // Title bar (long-press draggable)
-                  LongPressDraggable<DragPayload>(
-                    data: PanePayload(leaf.id),
-                    delay: const Duration(milliseconds: 400),
-                    dragAnchorStrategy: pointerDragAnchorStrategy,
-                    feedback: Material(
-                      color: Colors.transparent,
-                      child: Container(
-                        width: 200,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? AppColors.darkSurface3
-                              : AppColors.lightSurface3,
-                          borderRadius: BorderRadius.circular(AppTheme.radius6),
-                          border: Border.all(
-                              color: isDark
-                                  ? AppColors.darkPrimary
-                                  : AppColors.lightPrimary),
-                        ),
-                        child: Text(
-                          leaf.displayName,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: isDark
-                                ? AppColors.darkTextPrimary
-                                : AppColors.lightTextPrimary,
-                          ),
-                        ),
-                      ),
-                    ),
-                    childWhenDragging: Opacity(
-                      opacity: 0.3,
-                      child: _buildTitleBar(notifier, leaf),
-                    ),
-                    child: _buildTitleBar(notifier, leaf),
-                  ),
+                  // Title bar — drag handles now live inside PaneTitleBar
+                  _buildTitleBar(notifier, leaf),
                   // Content area
                   Expanded(child: _buildContent(leaf)),
                 ],
@@ -129,12 +95,11 @@ class _LeafNodeWidgetState extends ConsumerState<LeafNodeWidget> {
       leaf: leaf,
       isDark: isDark,
       onClose: () => notifier.closeLeaf(leaf.id),
-      onTogglePreview: () => notifier.setPreviewMode(leaf.id, !leaf.isPreviewMode),
+      onTogglePreview: () =>
+          notifier.setPreviewMode(leaf.id, !leaf.isPreviewMode),
       onOpenPreview: () => notifier.openPreviewPane(leaf.id),
-      onUndo: () {
-        // Delegate to child editor's undo
-        // Using focus + keyboard shortcut dispatch
-      },
+      onUndo: () => _editorKey.currentState?.undo(),
+      onSave: () => _editorKey.currentState?.save(),
     );
   }
 
@@ -146,6 +111,7 @@ class _LeafNodeWidgetState extends ConsumerState<LeafNodeWidget> {
       return MarkdownPreview(filePath: leaf.filePath!, isDark: isDark);
     }
     return MarkdownEditor(
+      key: _editorKey,
       leafId: leaf.id,
       filePath: leaf.filePath!,
       isDark: isDark,

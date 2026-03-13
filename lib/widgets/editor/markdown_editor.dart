@@ -1,13 +1,14 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../models/pane_node.dart';
+import '../../providers/pane_tree_provider.dart';
 import '../../services/file_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_theme.dart';
-import 'editor_toolbar.dart';
 
-class MarkdownEditor extends StatefulWidget {
+class MarkdownEditor extends ConsumerStatefulWidget {
   final String leafId;
   final String filePath;
   final bool isDark;
@@ -20,14 +21,15 @@ class MarkdownEditor extends StatefulWidget {
   });
 
   @override
-  State<MarkdownEditor> createState() => _MarkdownEditorState();
+  MarkdownEditorState createState() => MarkdownEditorState();
 }
 
-class _MarkdownEditorState extends State<MarkdownEditor> {
+/// Public state so [LeafNodeWidget] can hold a [GlobalKey<MarkdownEditorState>]
+/// and call [save] from the title-bar save button.
+class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
   late final TextEditingController _controller;
   late final UndoHistoryController _undoController;
   late final FocusNode _focusNode;
-  Timer? _saveTimer;
   bool _loaded = false;
 
   @override
@@ -40,11 +42,9 @@ class _MarkdownEditorState extends State<MarkdownEditor> {
   }
 
   @override
-  void didUpdateWidget(MarkdownEditor old) {
-    super.didUpdateWidget(old);
-    if (old.filePath != widget.filePath) {
-      _loadFile();
-    }
+  void didUpdateWidget(MarkdownEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.filePath != widget.filePath) _loadFile();
   }
 
   Future<void> _loadFile() async {
@@ -57,26 +57,25 @@ class _MarkdownEditorState extends State<MarkdownEditor> {
   }
 
   void _onChanged(String _) {
-    // Mark unsaved
-    if (mounted) {
-      // Notify provider about unsaved state
-      _saveTimer?.cancel();
-      _saveTimer = Timer(const Duration(seconds: 2), _save);
+    // Only trigger once per dirty cycle to avoid flooding the provider.
+    final node = findNode(ref.read(paneTreeProvider), widget.leafId);
+    if (node is LeafNode && !node.hasUnsavedChanges) {
+      ref.read(paneTreeProvider.notifier).markUnsaved(widget.leafId, true);
     }
   }
 
-  Future<void> _save() async {
+  /// Save the file and clear the unsaved indicator.
+  Future<void> save() async {
     await FileService.instance.writeFile(widget.filePath, _controller.text);
     if (mounted) {
-      // Will be called by parent to clear unsaved state
+      ref.read(paneTreeProvider.notifier).markSaved(widget.leafId);
     }
   }
 
-  void _undo() => _undoController.undo();
+  void undo() => _undoController.undo();
 
   @override
   void dispose() {
-    _saveTimer?.cancel();
     _controller.dispose();
     _undoController.dispose();
     _focusNode.dispose();
@@ -103,44 +102,33 @@ class _MarkdownEditorState extends State<MarkdownEditor> {
 
     return CallbackShortcuts(
       bindings: {
-        const SingleActivator(LogicalKeyboardKey.keyS, control: true): _save,
-        const SingleActivator(LogicalKeyboardKey.keyZ, control: true): _undo,
+        const SingleActivator(LogicalKeyboardKey.keyS, control: true): save,
+        const SingleActivator(LogicalKeyboardKey.keyZ, control: true): undo,
       },
-      child: Column(
-        children: [
-          Expanded(
-            child: Container(
-              color: bgColor,
-              child: TextField(
-                controller: _controller,
-                undoController: _undoController,
-                focusNode: _focusNode,
-                maxLines: null,
-                expands: true,
-                textAlignVertical: TextAlignVertical.top,
-                onChanged: _onChanged,
-                cursorColor: caretColor,
-                selectionControls: materialTextSelectionControls,
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 14,
-                  height: 1.6,
-                  color: textColor,
-                ),
-                decoration: InputDecoration(
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.all(AppTheme.sp16),
-                  fillColor: bgColor,
-                  filled: true,
-                ),
-              ),
-            ),
+      child: Container(
+        color: bgColor,
+        child: TextField(
+          controller: _controller,
+          undoController: _undoController,
+          focusNode: _focusNode,
+          maxLines: null,
+          expands: true,
+          textAlignVertical: TextAlignVertical.top,
+          onChanged: _onChanged,
+          cursorColor: caretColor,
+          selectionControls: materialTextSelectionControls,
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: 14,
+            height: 1.6,
+            color: textColor,
           ),
-          // Formatting toolbar (shown always for touch users)
-          EditorToolbar(
-            controller: _controller,
-            isDark: widget.isDark,
+          decoration: InputDecoration(
+            border: InputBorder.none,
+            contentPadding: const EdgeInsets.all(AppTheme.sp16),
+            fillColor: bgColor,
+            filled: true,
           ),
-        ],
+        ),
       ),
     );
   }

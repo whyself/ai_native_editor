@@ -187,6 +187,8 @@ class _AiPanelState extends ConsumerState<AiPanel> {
                   child: Wrap(
                     spacing: AppTheme.sp4,
                     runSpacing: AppTheme.sp4,
+                    alignment: WrapAlignment.start,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: chat.contextFilePaths
                         .map(
                           (path) => ContextFileChip(
