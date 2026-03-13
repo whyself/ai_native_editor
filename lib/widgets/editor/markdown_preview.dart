@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:flutter_markdown_latex/flutter_markdown_latex.dart';
-import 'package:markdown/markdown.dart' as md;
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/file_service.dart';
 import '../../theme/app_colors.dart';
@@ -63,31 +61,12 @@ class _MarkdownPreviewState extends State<MarkdownPreview> {
       );
     }
 
-    // GitHub-flavored markdown + LaTeX block and inline syntax
-    final extensionSet = md.ExtensionSet(
-      [
-        ...md.ExtensionSet.gitHubFlavored.blockSyntaxes,
-        LatexBlockSyntax(),
-      ],
-      [
-        LatexInlineSyntax(),
-        ...md.ExtensionSet.gitHubFlavored.inlineSyntaxes,
-      ],
-    );
-
     return Container(
       color: bgColor,
       child: Markdown(
         data: _content ?? '',
         selectable: true,
         padding: const EdgeInsets.all(AppTheme.sp24),
-        extensionSet: extensionSet,
-        builders: {
-          'latex': LatexElementBuilder(
-            textStyle: TextStyle(color: textPrimary),
-            textScaleFactor: 1.1,
-          ),
-        },
         onTapLink: (text, href, title) async {
           if (href != null) {
             final uri = Uri.tryParse(href);
