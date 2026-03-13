@@ -138,13 +138,11 @@ li { margin: 4px 0; }
     return TeXView(
       child: TeXViewDocument(
         _buildDocument(widget.isDark),
-        style: TeXViewStyle(
-          backgroundColor: bgColor,
-        ),
+        style: TeXViewStyle.fromCSS(
+            'background-color: ${_hex(bgColor)}; margin:0; padding:0;'),
       ),
-      style: TeXViewStyle(
-        backgroundColor: bgColor,
-      ),
+      style: TeXViewStyle.fromCSS(
+          'background-color: ${_hex(bgColor)}; margin:0; padding:0;'),
       loadingWidgetBuilder: (_) => Container(
         color: bgColor,
         child: Center(
