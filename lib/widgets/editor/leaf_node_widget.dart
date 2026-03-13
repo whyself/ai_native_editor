@@ -34,7 +34,23 @@ class _LeafNodeWidgetState extends ConsumerState<LeafNodeWidget> {
     final border = isDark ? AppColors.darkBorderSubtle : AppColors.lightBorderSubtle;
 
     return DragTarget<DragPayload>(
-      onWillAcceptWithDetails: (_) => true,
+      onWillAcceptWithDetails: (details) {
+        final payload = details.data;
+        if (payload is TitleBarPayload) {
+          // Don't allow dropping a pane onto itself.
+          return payload.leafId != leaf.id;
+        }
+        if (payload is FilePathPayload) {
+          // Reject if this file is already open in any leaf.
+          final tree = ref.read(paneTreeProvider);
+          final alreadyOpen = collectLeafIds(tree)
+              .map((id) => findNode(tree, id))
+              .whereType<LeafNode>()
+              .any((n) => n.filePath == payload.filePath);
+          return !alreadyOpen;
+        }
+        return true;
+      },
       onMove: (details) {
         final box = context.findRenderObject() as RenderBox?;
         if (box == null) return;
@@ -58,6 +74,8 @@ class _LeafNodeWidgetState extends ConsumerState<LeafNodeWidget> {
               notifier.splitWithFile(leaf.id, filePath, zone);
             }
           case PanePayload(:final leafId):
+            notifier.moveLeaf(leafId, leaf.id, zone);
+          case TitleBarPayload(:final leafId):
             notifier.moveLeaf(leafId, leaf.id, zone);
         }
       },

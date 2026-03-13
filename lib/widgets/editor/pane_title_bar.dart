@@ -43,103 +43,53 @@ class PaneTitleBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // ── Pane drag handle (long-press → reorder pane) ──────────────
-          LongPressDraggable<DragPayload>(
-            data: PanePayload(leaf.id),
-            delay: const Duration(milliseconds: 400),
-            dragAnchorStrategy: pointerDragAnchorStrategy,
-            feedback: Material(
-              color: Colors.transparent,
-              child: Container(
-                width: 200,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? AppColors.darkSurface3
-                      : AppColors.lightSurface3,
-                  borderRadius: BorderRadius.circular(AppTheme.radius6),
-                  border: Border.all(color: primary),
-                ),
-                child: Text(
-                  leaf.displayName,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: textPrimary,
-                    decoration: TextDecoration.none,
+          // ── File icon + name — long-press drags pane OR to AI ────────────
+          Expanded(
+            child: LongPressDraggable<DragPayload>(
+              data: TitleBarPayload(
+                leafId: leaf.id,
+                filePath: leaf.filePath,
+              ),
+              delay: const Duration(milliseconds: 400),
+              dragAnchorStrategy: pointerDragAnchorStrategy,
+              feedback: Material(
+                color: Colors.transparent,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? AppColors.darkSurface3
+                        : AppColors.lightSurface3,
+                    borderRadius:
+                        BorderRadius.circular(AppTheme.radius6),
+                    border: Border.all(color: primary),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.open_with, size: 12, color: textSecondary),
+                      const SizedBox(width: 6),
+                      Text(
+                        leaf.displayName,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: textPrimary,
+                          decoration: TextDecoration.none,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
+              child: _FileNameArea(
+                leaf: leaf,
+                isDark: isDark,
+                textSecondary: textSecondary,
+                textPrimary: textPrimary,
+                primary: primary,
+              ),
             ),
-            child: Container(
-              width: 28,
-              height: 40,
-              alignment: Alignment.center,
-              child: Icon(Icons.drag_indicator,
-                  size: 16, color: textSecondary.withOpacity(0.5)),
-            ),
-          ),
-
-          // ── File icon + name (long-press → drag to AI chat) ───────────
-          Expanded(
-            child: leaf.filePath != null
-                ? LongPressDraggable<DragPayload>(
-                    data: FilePathPayload(leaf.filePath!),
-                    delay: const Duration(milliseconds: 400),
-                    dragAnchorStrategy: pointerDragAnchorStrategy,
-                    feedback: Material(
-                      color: Colors.transparent,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? AppColors.darkAiAccent.withOpacity(0.15)
-                              : AppColors.lightAiAccent.withOpacity(0.15),
-                          borderRadius:
-                              BorderRadius.circular(AppTheme.radius6),
-                          border: Border.all(
-                            color: isDark
-                                ? AppColors.darkAiAccent
-                                : AppColors.lightAiAccent,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.description_outlined,
-                                size: 12,
-                                color: isDark
-                                    ? AppColors.darkAiAccent
-                                    : AppColors.lightAiAccent),
-                            const SizedBox(width: 4),
-                            Text(
-                              leaf.displayName,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: isDark
-                                    ? AppColors.darkAiAccent
-                                    : AppColors.lightAiAccent,
-                                decoration: TextDecoration.none,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    child: _FileNameArea(
-                        leaf: leaf,
-                        isDark: isDark,
-                        textSecondary: textSecondary,
-                        textPrimary: textPrimary,
-                        primary: primary),
-                  )
-                : _FileNameArea(
-                    leaf: leaf,
-                    isDark: isDark,
-                    textSecondary: textSecondary,
-                    textPrimary: textPrimary,
-                    primary: primary),
           ),
 
           // ── Source / Rendered toggle ───────────────────────────────────
@@ -169,7 +119,7 @@ class PaneTitleBar extends StatelessWidget {
           if (!leaf.isPreviewMode && leaf.filePath != null)
             _TitleBarBtn(
               icon: Icons.undo,
-              tooltip: '撤销 (Ctrl+Z)',
+              tooltip: '撤销',
               onTap: onUndo,
               isDark: isDark,
             ),

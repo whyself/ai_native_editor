@@ -56,15 +56,24 @@ class _AiPanelState extends ConsumerState<AiPanel> {
     });
 
     return DragTarget<DragPayload>(
-      onWillAcceptWithDetails: (details) => details.data is FilePathPayload,
+      onWillAcceptWithDetails: (details) {
+        final d = details.data;
+        if (d is FilePathPayload) return true;
+        if (d is TitleBarPayload) return d.filePath != null;
+        return false;
+      },
       onMove: (_) => setState(() => _dropHover = true),
       onLeave: (_) => setState(() => _dropHover = false),
       onAcceptWithDetails: (details) {
         setState(() => _dropHover = false);
+        String? filePath;
         if (details.data is FilePathPayload) {
-          ref
-              .read(chatProvider.notifier)
-              .addContextFile((details.data as FilePathPayload).filePath);
+          filePath = (details.data as FilePathPayload).filePath;
+        } else if (details.data is TitleBarPayload) {
+          filePath = (details.data as TitleBarPayload).filePath;
+        }
+        if (filePath != null) {
+          ref.read(chatProvider.notifier).addContextFile(filePath);
         }
       },
       builder: (context, candidates, _) {
@@ -178,6 +187,7 @@ class _AiPanelState extends ConsumerState<AiPanel> {
               // Context file chips
               if (chat.contextFilePaths.isNotEmpty)
                 Container(
+                  width: double.infinity,
                   padding: const EdgeInsets.symmetric(
                       horizontal: AppTheme.sp8, vertical: AppTheme.sp6),
                   decoration: BoxDecoration(

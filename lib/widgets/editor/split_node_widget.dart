@@ -19,10 +19,11 @@ class SplitNodeWidget extends ConsumerWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final totalSize = isHorizontal ? constraints.maxWidth : constraints.maxHeight;
-        final minRatio = isHorizontal
-            ? 200 / (totalSize > 0 ? totalSize : 200)
-            : 150 / (totalSize > 0 ? totalSize : 150);
-        final maxRatio = 1 - minRatio;
+        // clamp minRatio to ≤ 0.499 so minRatio < maxRatio always holds,
+        // preventing double.clamp from throwing when the window is very small.
+        final minPx = isHorizontal ? 200.0 : 150.0;
+        final minRatio = (totalSize > 0 ? minPx / totalSize : 0.499).clamp(0.05, 0.499);
+        final maxRatio = 1.0 - minRatio;
         final ratio = node.ratio.clamp(minRatio, maxRatio);
 
         Widget first = _buildChild(node.first);
