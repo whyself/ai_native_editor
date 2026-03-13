@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/pane_node.dart';
 import '../../providers/pane_tree_provider.dart';
+import '../../providers/live_content_provider.dart';
 import '../../services/file_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_theme.dart';
@@ -45,6 +46,9 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
   String _lastSnapshot = '';
   Timer? _undoDebounce;
 
+  // ── Debounced preview sync ────────────────────────────────────────────────
+  Timer? _previewSyncTimer;
+
   int _lineCount = 1;
 
   @override
@@ -76,7 +80,10 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
   Future<void> _loadFile() async {
     setState(() => _loaded = false);
     _undoDebounce?.cancel();
+    _previewSyncTimer?.cancel();
     _undoHistory.clear();
+    // Clear any stale live-content so the preview reads from disk.
+    ref.read(liveContentProvider(widget.filePath).notifier).state = null;
     final content = await FileService.instance.readFile(widget.filePath);
     if (!mounted) return;
     _controller.text = content ?? '';
@@ -106,6 +113,14 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
       _lastSnapshot = text;
       if (_undoHistory.length > 100) _undoHistory.removeAt(0);
     });
+
+    // Debounced preview sync: update live content after 800 ms of inactivity.
+    _previewSyncTimer?.cancel();
+    _previewSyncTimer = Timer(const Duration(milliseconds: 800), () {
+      if (mounted) {
+        ref.read(liveContentProvider(widget.filePath).notifier).state = text;
+      }
+    });
   }
 
   /// Save the file and clear the unsaved indicator.
@@ -117,6 +132,10 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
 
     await FileService.instance.writeFile(widget.filePath, _controller.text);
     if (mounted) {
+      // Immediately push current text to the preview (cancels pending debounce).
+      _previewSyncTimer?.cancel();
+      ref.read(liveContentProvider(widget.filePath).notifier).state =
+          _controller.text;
       ref.read(paneTreeProvider.notifier).markSaved(widget.leafId);
     }
   }
@@ -138,6 +157,7 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
   @override
   void dispose() {
     _undoDebounce?.cancel();
+    _previewSyncTimer?.cancel();
     _editorScrollController.removeListener(_syncLineNumbers);
     _controller.dispose();
     _focusNode.dispose();
@@ -193,23 +213,25 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
                   child: Container(width: 1, color: dividerColor),
                 ),
                 // Number list (mirrors editor scroll position)
-                ListView.builder(
-                  controller: _lineNumberController,
-                  physics: const NeverScrollableScrollPhysics(),
-                  padding: const EdgeInsets.only(
-                      top: _kEditorPadding, bottom: _kEditorPadding),
-                  itemCount: _lineCount,
-                  itemExtent: _kLineHeightPx,
-                  itemBuilder: (_, i) => Align(
-                    alignment: Alignment.centerRight,
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: Text(
-                        '${i + 1}',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 12,
-                          height: _kLineHeightPx / 12,
-                          color: lineNumColor,
+                Positioned.fill(
+                  child: ListView.builder(
+                    controller: _lineNumberController,
+                    physics: const NeverScrollableScrollPhysics(),
+                    padding: const EdgeInsets.only(
+                        top: _kEditorPadding, bottom: _kEditorPadding),
+                    itemCount: _lineCount,
+                    itemExtent: _kLineHeightPx,
+                    itemBuilder: (_, i) => Align(
+                      alignment: Alignment.centerRight,
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: Text(
+                          '${i + 1}',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 12,
+                            height: _kLineHeightPx / 12,
+                            color: lineNumColor,
+                          ),
                         ),
                       ),
                     ),

@@ -66,6 +66,9 @@ class LeafNode extends PaneNode {
   final ContentType contentType;
   final bool isPreviewMode;
   final bool hasUnsavedChanges;
+  /// When true this pane is render-only: the Source/preview toggle and
+  /// Save/Undo buttons are hidden so it cannot be switched to an editor.
+  final bool previewOnly;
 
   const LeafNode({
     required super.id,
@@ -73,6 +76,7 @@ class LeafNode extends PaneNode {
     this.contentType = ContentType.markdown,
     this.isPreviewMode = false,
     this.hasUnsavedChanges = false,
+    this.previewOnly = false,
   });
 
   factory LeafNode.empty() => LeafNode(id: _uuid.v4());
@@ -88,6 +92,7 @@ class LeafNode extends PaneNode {
         filePath: path,
         contentType: contentType,
         isPreviewMode: true,
+        previewOnly: true,
       );
 
   LeafNode copyWith({
@@ -95,6 +100,7 @@ class LeafNode extends PaneNode {
     ContentType? contentType,
     bool? isPreviewMode,
     bool? hasUnsavedChanges,
+    bool? previewOnly,
   }) =>
       LeafNode(
         id: id,
@@ -102,6 +108,7 @@ class LeafNode extends PaneNode {
         contentType: contentType ?? this.contentType,
         isPreviewMode: isPreviewMode ?? this.isPreviewMode,
         hasUnsavedChanges: hasUnsavedChanges ?? this.hasUnsavedChanges,
+        previewOnly: previewOnly ?? this.previewOnly,
       );
 
   String get displayName {
@@ -145,7 +152,8 @@ PaneNode insertAtLeaf(PaneNode tree, String targetLeafId, PaneNode newLeaf, Drop
         return tree.copyWith(
           filePath: newLeaf.filePath,
           contentType: newLeaf.contentType,
-          isPreviewMode: false,
+          // previewOnly panes stay in preview mode; editor panes reset to editor
+          isPreviewMode: tree.previewOnly ? true : false,
           hasUnsavedChanges: false,
         );
       }

@@ -92,9 +92,10 @@ class PaneTitleBar extends StatelessWidget {
             ),
           ),
 
-          // ── Source / Rendered toggle ───────────────────────────────────
+          // ── Source / Rendered toggle (hidden for preview-only panes) ─────
           if (leaf.filePath != null &&
-              leaf.contentType == ContentType.markdown)
+              leaf.contentType == ContentType.markdown &&
+              !leaf.previewOnly)
             _SegmentedControl(
               isPreview: leaf.isPreviewMode,
               onToggle: onTogglePreview,
@@ -124,9 +125,10 @@ class PaneTitleBar extends StatelessWidget {
               isDark: isDark,
             ),
 
-          // ── Open preview pane ─────────────────────────────────────────
+          // ── Open preview pane (hidden for preview-only panes) ────────
           if (leaf.filePath != null &&
-              leaf.contentType == ContentType.markdown)
+              leaf.contentType == ContentType.markdown &&
+              !leaf.previewOnly)
             _TitleBarBtn(
               icon: Icons.call_split_outlined,
               tooltip: '新建预览窗口',
@@ -175,7 +177,9 @@ class _FileNameArea extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            Icons.description_outlined,
+            leaf.previewOnly
+                ? Icons.visibility_outlined
+                : Icons.description_outlined,
             size: 14,
             color: textSecondary,
           ),
