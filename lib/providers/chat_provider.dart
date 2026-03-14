@@ -159,7 +159,17 @@ class ChatNotifier extends Notifier<ChatState> {
       baseUrl: settings.baseUrl,
     );
 
-    final cur = state.current;
+    var cur = state.current;
+
+    // ── Auto-name session from first user message ─────────────────────────
+    final isDefaultName = RegExp(r'^对话 \d+$').hasMatch(cur.name);
+    if (isDefaultName && cur.messages.isEmpty) {
+      final snippet = text.replaceAll(RegExp(r'\s+'), ' ').trim();
+      final autoName =
+          snippet.length > 18 ? '${snippet.substring(0, 18)}…' : snippet;
+      cur = cur.copyWith(name: autoName);
+      state = state.withUpdatedCurrent(cur);
+    }
     final contextPaths = List<String>.from(cur.contextFilePaths);
     String contextPrefix = '';
 

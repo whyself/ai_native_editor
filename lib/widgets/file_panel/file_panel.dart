@@ -1,8 +1,10 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../models/drag_payload.dart';
 import '../../models/pane_node.dart';
 import '../../models/workspace_file.dart';
@@ -208,11 +210,31 @@ class _NewFileButton extends ConsumerWidget {
     final name =
         filename.trim().endsWith('.md') ? filename.trim() : '${filename.trim()}.md';
 
-    // 2. Determine save directory: use user-configured dir, or fall back to app docs
+    // 2. Determine save directory
     final settings = ref.read(settingsProvider);
-    final String saveDir;
+    String saveDir;
     if (settings.defaultSaveDir != null) {
-      saveDir = settings.defaultSaveDir!;
+      // Request storage permission for user-selected external directory
+      final hasPermission = await _requestStoragePermission(context);
+      if (hasPermission) {
+        saveDir = settings.defaultSaveDir!;
+      } else {
+        // Fall back to internal app documents dir
+        final docsDir = await getApplicationDocumentsDirectory();
+        saveDir = docsDir.path;
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('未获得存储权限，文件将保存至应用内部目录'),
+              action: SnackBarAction(
+                label: '去授权',
+                onPressed: openAppSettings,
+              ),
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      }
     } else {
       final docsDir = await getApplicationDocumentsDirectory();
       saveDir = docsDir.path;
@@ -226,7 +248,13 @@ class _NewFileButton extends ConsumerWidget {
     if (!ok) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('创建文件失败，请检查路径权限')),
+          SnackBar(
+            content: Text('创建文件失败：$finalPath'),
+            action: SnackBarAction(
+              label: '去授权',
+              onPressed: openAppSettings,
+            ),
+          ),
         );
       }
       return;
@@ -235,7 +263,6 @@ class _NewFileButton extends ConsumerWidget {
     // 4. Add to workspace
     ref.read(workspaceProvider.notifier).addFiles([finalPath]);
 
-    // Show success snackbar with save path
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -245,7 +272,7 @@ class _NewFileButton extends ConsumerWidget {
       );
     }
 
-    // 5. Open in editor: empty first leaf → replace, otherwise → sibling split
+    // 5. Open in editor
     final paneTree = ref.read(paneTreeProvider);
     final leafIds = collectLeafIds(paneTree);
     if (leafIds.isNotEmpty) {
@@ -257,6 +284,29 @@ class _NewFileButton extends ConsumerWidget {
             .read(paneTreeProvider.notifier)
             .splitWithFile(leafIds.first, finalPath, DropZone.right);
       }
+    }
+  }
+
+  /// Request storage write permission on Android.
+  /// Returns true if permission is granted or not needed (non-Android).
+  Future<bool> _requestStoragePermission(BuildContext context) async {
+    if (!Platform.isAndroid) return true;
+    // Android 11+ (API 30+): MANAGE_EXTERNAL_STORAGE
+    // Android  ≤ 10 (API 29): WRITE_EXTERNAL_STORAGE
+    try {
+      // Try legacy storage permission (works up to API 29)
+      var status = await Permission.storage.status;
+      if (status.isGranted) return true;
+      status = await Permission.storage.request();
+      if (status.isGranted) return true;
+
+      // For Android 11+ also try MANAGE_EXTERNAL_STORAGE
+      var manageStatus = await Permission.manageExternalStorage.status;
+      if (manageStatus.isGranted) return true;
+      manageStatus = await Permission.manageExternalStorage.request();
+      return manageStatus.isGranted;
+    } catch (_) {
+      return false;
     }
   }
 

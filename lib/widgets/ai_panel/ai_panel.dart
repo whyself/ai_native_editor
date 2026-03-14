@@ -662,7 +662,7 @@ class _ChatInputBarState extends ConsumerState<_ChatInputBar> {
 
           const SizedBox(height: AppTheme.sp6),
 
-          // ── Bottom toolbar: [+] [model] ... [send] ─────────────────────
+          // ── Bottom toolbar: [+] [model ───────] [send] ────────────────
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -684,9 +684,13 @@ class _ChatInputBarState extends ConsumerState<_ChatInputBar> {
                 ),
               ),
               const SizedBox(width: AppTheme.sp4),
-              // Model selector
-              _ModelSelector(isDark: widget.isDark),
-              const Spacer(),
+              // Model selector – Expanded so it fills middle and never overflows
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: _ModelSelector(isDark: widget.isDark),
+                ),
+              ),
               // Send button
               GestureDetector(
                 onTap: canSend ? _send : null,

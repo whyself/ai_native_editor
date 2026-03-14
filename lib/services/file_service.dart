@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:path/path.dart' as p;
+import 'package:syncfusion_flutter_pdf/pdf.dart';
 
 class FileService {
   FileService._();
@@ -35,11 +36,26 @@ class FileService {
     return content;
   }
 
-  /// Returns a context placeholder for a PDF file.
-  /// Native PDF text extraction is not supported in this build; the AI will
-  /// know a PDF was attached and can ask the user to paste relevant content.
+  /// Extract text from a PDF file using Syncfusion PDF.
+  /// Returns up to [maxChars] characters of extracted text.
   Future<String?> extractPdfText(String path, {int maxChars = 50000}) async {
-    final name = p.basename(path);
-    return '[已添加 PDF 文件 "$name"。当前版本暂不支持 PDF 文字提取，如需 AI 分析内容，请手动粘贴相关段落到消息中。]';
+    try {
+      final bytes = await File(path).readAsBytes();
+      final doc = PdfDocument(inputBytes: bytes);
+      final pageCount = doc.pages.count;
+      final extractor = PdfTextExtractor(doc);
+      final text = extractor.extractText();
+      doc.dispose();
+
+      if (text.trim().isEmpty) {
+        return '[PDF 文件（共 $pageCount 页）无法提取文字内容（可能为扫描版 PDF）]';
+      }
+      if (text.length > maxChars) {
+        return '${text.substring(0, maxChars)}\n\n[PDF 内容已截断，仅显示前 $maxChars 字]';
+      }
+      return text;
+    } catch (e) {
+      return '[PDF 文字提取失败：$e]';
+    }
   }
 }

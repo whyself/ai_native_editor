@@ -24,7 +24,9 @@ dependencies:
   markdown: ^7.2.2
   flutter_markdown_latex: ^0.3.4
   shared_preferences: ^2.3.3
-  pdfx: ^2.6.0
+  pdfx: 2.6.0
+  syncfusion_flutter_pdf: ^28.1.33
+  permission_handler: ^11.3.1
 
 dev_dependencies:
   flutter_test:
