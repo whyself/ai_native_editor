@@ -5,7 +5,7 @@ const _uuid = Uuid();
 
 // ---- Enums ----
 
-enum ContentType { markdown, plainText, unknown }
+enum ContentType { markdown, plainText, unknown, pdf }
 
 enum DropZone { top, bottom, left, right, center }
 
@@ -16,6 +16,7 @@ ContentType inferContentType(String path) {
   return switch (ext) {
     'md' || 'markdown' => ContentType.markdown,
     'txt' => ContentType.plainText,
+    'pdf' => ContentType.pdf,
     _ => ContentType.unknown,
   };
 }
@@ -211,4 +212,58 @@ List<String> collectLeafIds(PaneNode tree) {
     return [...collectLeafIds(tree.first), ...collectLeafIds(tree.second)];
   }
   return [];
+}
+
+// ---- JSON serialization ----
+
+/// Serialize a PaneNode tree to a JSON map.
+Map<String, dynamic> paneNodeToJson(PaneNode node) {
+  if (node is SplitNode) {
+    return {
+      'type': 'split',
+      'id': node.id,
+      'axis': node.axis == Axis.horizontal ? 'horizontal' : 'vertical',
+      'ratio': node.ratio,
+      'first': paneNodeToJson(node.first),
+      'second': paneNodeToJson(node.second),
+    };
+  }
+  final l = node as LeafNode;
+  return {
+    'type': 'leaf',
+    'id': l.id,
+    'filePath': l.filePath,
+    'contentType': l.contentType.name,
+    'isPreviewMode': l.isPreviewMode,
+    'hasUnsavedChanges': false, // always reset on restore
+    'previewOnly': l.previewOnly,
+  };
+}
+
+/// Deserialize a PaneNode tree from JSON. Falls back to [LeafNode.empty()] on any error.
+PaneNode paneNodeFromJson(Map<String, dynamic> json) {
+  try {
+    if (json['type'] == 'split') {
+      return SplitNode(
+        id: json['id'] as String,
+        axis: json['axis'] == 'horizontal' ? Axis.horizontal : Axis.vertical,
+        ratio: (json['ratio'] as num).toDouble(),
+        first: paneNodeFromJson(json['first'] as Map<String, dynamic>),
+        second: paneNodeFromJson(json['second'] as Map<String, dynamic>),
+      );
+    }
+    return LeafNode(
+      id: json['id'] as String,
+      filePath: json['filePath'] as String?,
+      contentType: ContentType.values.firstWhere(
+        (e) => e.name == json['contentType'],
+        orElse: () => ContentType.unknown,
+      ),
+      isPreviewMode: json['isPreviewMode'] as bool? ?? false,
+      hasUnsavedChanges: false,
+      previewOnly: json['previewOnly'] as bool? ?? false,
+    );
+  } catch (_) {
+    return LeafNode.empty();
+  }
 }

@@ -1,9 +1,21 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/pane_node.dart';
+import '../services/persistence_service.dart';
 
 class PaneTreeNotifier extends Notifier<PaneNode> {
   @override
-  PaneNode build() => LeafNode.empty();
+  PaneNode build() {
+    // Restore pane layout from last session
+    final saved = PersistenceService.instance.loadPaneTree();
+    if (saved != null) {
+      return paneNodeFromJson(saved);
+    }
+    return LeafNode.empty();
+  }
+
+  void _persist() {
+    PersistenceService.instance.savePaneTree(paneNodeToJson(state));
+  }
 
   // ---- File operations ----
 
@@ -14,11 +26,13 @@ class PaneTreeNotifier extends Notifier<PaneNode> {
           isPreviewMode: false,
           hasUnsavedChanges: false,
         ));
+    _persist();
   }
 
   void splitWithFile(String targetLeafId, String filePath, DropZone zone) {
     final newLeaf = LeafNode.forFile(filePath);
     state = insertAtLeaf(state, targetLeafId, newLeaf, zone);
+    _persist();
   }
 
   void moveLeaf(String sourceLeafId, String targetLeafId, DropZone zone) {
@@ -31,19 +45,23 @@ class PaneTreeNotifier extends Notifier<PaneNode> {
       return;
     }
     state = insertAtLeaf(withoutSource, targetLeafId, source, zone);
+    _persist();
   }
 
   void closeLeaf(String leafId) {
     final result = removeLeaf(state, leafId);
     state = result ?? LeafNode.empty();
+    _persist();
   }
 
   void setRatio(String splitNodeId, double ratio) {
     state = updateRatio(state, splitNodeId, ratio);
+    _persist();
   }
 
   void setPreviewMode(String leafId, bool isPreview) {
     state = mapLeaf(state, leafId, (leaf) => leaf.copyWith(isPreviewMode: isPreview));
+    _persist();
   }
 
   void openPreviewPane(String sourceLeafId) {
@@ -51,14 +69,23 @@ class PaneTreeNotifier extends Notifier<PaneNode> {
     if (source is! LeafNode || source.filePath == null) return;
     final preview = LeafNode.previewFor(source.filePath!, source.contentType);
     state = insertAtLeaf(state, sourceLeafId, preview, DropZone.right);
+    _persist();
   }
 
   void markUnsaved(String leafId, bool hasUnsaved) {
     state = mapLeaf(state, leafId, (leaf) => leaf.copyWith(hasUnsavedChanges: hasUnsaved));
+    // Don't persist on every keystroke; save state is ephemeral
   }
 
   void markSaved(String leafId) {
     state = mapLeaf(state, leafId, (leaf) => leaf.copyWith(hasUnsavedChanges: false));
+    _persist();
+  }
+
+  /// Reset to initial state (used by trash button).
+  void reset() {
+    state = LeafNode.empty();
+    _persist();
   }
 }
 

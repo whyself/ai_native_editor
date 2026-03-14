@@ -9,6 +9,7 @@ import 'drop_zone_overlay.dart';
 import 'markdown_editor.dart';
 import 'markdown_preview.dart';
 import 'pane_title_bar.dart';
+import 'pdf_viewer_widget.dart';
 
 class LeafNodeWidget extends ConsumerStatefulWidget {
   final LeafNode leaf;
@@ -124,6 +125,10 @@ class _LeafNodeWidgetState extends ConsumerState<LeafNodeWidget> {
   Widget _buildContent(LeafNode leaf) {
     if (leaf.filePath == null) {
       return _WelcomePane(isDark: isDark);
+    }
+    // PDF files are always shown in the PDF viewer (no editor mode)
+    if (leaf.contentType == ContentType.pdf) {
+      return PdfViewerWidget(filePath: leaf.filePath!, isDark: isDark);
     }
     if (leaf.isPreviewMode) {
       return MarkdownPreview(filePath: leaf.filePath!, isDark: isDark);

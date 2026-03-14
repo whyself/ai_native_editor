@@ -104,10 +104,11 @@ class PaneTitleBar extends StatelessWidget {
 
           const SizedBox(width: AppTheme.sp4),
 
-          // ── Save button (only when dirty) ─────────────────────────────
+          // ── Save button (only when dirty, not for PDF) ────────────────
           if (leaf.hasUnsavedChanges &&
               !leaf.isPreviewMode &&
-              leaf.filePath != null)
+              leaf.filePath != null &&
+              leaf.contentType != ContentType.pdf)
             _TitleBarBtn(
               icon: Icons.save_outlined,
               tooltip: '保存 (Ctrl+S)',
@@ -116,8 +117,10 @@ class PaneTitleBar extends StatelessWidget {
               color: primary,
             ),
 
-          // ── Undo button ───────────────────────────────────────────────
-          if (!leaf.isPreviewMode && leaf.filePath != null)
+          // ── Undo button (not for PDF) ─────────────────────────────────
+          if (!leaf.isPreviewMode &&
+              leaf.filePath != null &&
+              leaf.contentType != ContentType.pdf)
             _TitleBarBtn(
               icon: Icons.undo,
               tooltip: '撤销',
@@ -179,7 +182,9 @@ class _FileNameArea extends StatelessWidget {
           Icon(
             leaf.previewOnly
                 ? Icons.visibility_outlined
-                : Icons.description_outlined,
+                : leaf.contentType == ContentType.pdf
+                    ? Icons.picture_as_pdf_outlined
+                    : Icons.description_outlined,
             size: 14,
             color: textSecondary,
           ),

@@ -2,57 +2,152 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../models/chat_message.dart';
+import '../models/chat_session.dart';
 import '../services/file_service.dart';
+import '../services/persistence_service.dart';
 import '../services/qwen_service.dart';
 import 'settings_provider.dart';
 
 const _uuid = Uuid();
 
 class ChatState {
-  final List<ChatMessage> messages;
-  final List<String> contextFilePaths;
-  final bool isStreaming;
+  final List<ChatSession> sessions;
+  final String currentSessionId;
 
   const ChatState({
-    this.messages = const [],
-    this.contextFilePaths = const [],
-    this.isStreaming = false,
+    required this.sessions,
+    required this.currentSessionId,
   });
 
-  bool get canSend => !isStreaming;
+  ChatSession get current =>
+      sessions.firstWhere((s) => s.id == currentSessionId);
+
+  bool get canSend => !current.isStreaming;
 
   ChatState copyWith({
-    List<ChatMessage>? messages,
-    List<String>? contextFilePaths,
-    bool? isStreaming,
+    List<ChatSession>? sessions,
+    String? currentSessionId,
   }) =>
       ChatState(
-        messages: messages ?? this.messages,
-        contextFilePaths: contextFilePaths ?? this.contextFilePaths,
-        isStreaming: isStreaming ?? this.isStreaming,
+        sessions: sessions ?? this.sessions,
+        currentSessionId: currentSessionId ?? this.currentSessionId,
       );
+
+  /// Return a new state with the current session replaced by [updated].
+  ChatState withUpdatedCurrent(ChatSession updated) => copyWith(
+        sessions: sessions
+            .map((s) => s.id == updated.id ? updated : s)
+            .toList(),
+      );
+}
+
+ChatState _defaultState() {
+  final first = ChatSession(id: _uuid.v4(), name: '对话 1');
+  return ChatState(sessions: [first], currentSessionId: first.id);
 }
 
 class ChatNotifier extends Notifier<ChatState> {
   @override
-  ChatState build() => const ChatState();
+  ChatState build() {
+    final saved = PersistenceService.instance.loadChatSessions();
+    if (saved.sessions != null && (saved.sessions as List).isNotEmpty) {
+      try {
+        final sessions = (saved.sessions as List)
+            .map((j) => ChatSession.fromJson(j as Map<String, dynamic>))
+            .toList();
+        final activeId = saved.activeId ?? sessions.first.id;
+        final validId = sessions.any((s) => s.id == activeId)
+            ? activeId
+            : sessions.first.id;
+        return ChatState(sessions: sessions, currentSessionId: validId);
+      } catch (_) {}
+    }
+    return _defaultState();
+  }
+
+  void _persist() {
+    PersistenceService.instance.saveChatSessions(
+      state.sessions.map((s) => s.toJson()).toList(),
+      state.currentSessionId,
+    );
+  }
+
+  // ── Session management ───────────────────────────────────────────────────
+
+  void newSession() {
+    final n = state.sessions.length + 1;
+    final session = ChatSession(id: _uuid.v4(), name: '对话 $n');
+    state = state.copyWith(
+      sessions: [...state.sessions, session],
+      currentSessionId: session.id,
+    );
+    _persist();
+  }
+
+  void deleteSession(String id) {
+    if (state.sessions.length == 1) {
+      // Last session: clear messages instead of deleting
+      state = state.withUpdatedCurrent(
+        state.current.copyWith(messages: [], contextFilePaths: []),
+      );
+      _persist();
+      return;
+    }
+    final idx = state.sessions.indexWhere((s) => s.id == id);
+    final remaining = state.sessions.where((s) => s.id != id).toList();
+    final newActive = id == state.currentSessionId
+        ? remaining[idx.clamp(0, remaining.length - 1)].id
+        : state.currentSessionId;
+    state = ChatState(sessions: remaining, currentSessionId: newActive);
+    _persist();
+  }
+
+  void switchSession(String id) {
+    if (state.currentSessionId == id) return;
+    state = state.copyWith(currentSessionId: id);
+    _persist();
+  }
+
+  void renameSession(String id, String name) {
+    if (name.trim().isEmpty) return;
+    state = state.copyWith(
+      sessions: state.sessions
+          .map((s) => s.id == id ? s.copyWith(name: name.trim()) : s)
+          .toList(),
+    );
+    _persist();
+  }
+
+  // ── Context files ────────────────────────────────────────────────────────
 
   void addContextFile(String filePath) {
-    if (state.contextFilePaths.contains(filePath)) return;
-    state = state.copyWith(
-      contextFilePaths: [...state.contextFilePaths, filePath],
+    final cur = state.current;
+    if (cur.contextFilePaths.contains(filePath)) return;
+    state = state.withUpdatedCurrent(
+      cur.copyWith(
+        contextFilePaths: [...cur.contextFilePaths, filePath],
+      ),
     );
   }
 
   void removeContextFile(String filePath) {
-    state = state.copyWith(
-      contextFilePaths: state.contextFilePaths.where((p) => p != filePath).toList(),
+    final cur = state.current;
+    state = state.withUpdatedCurrent(
+      cur.copyWith(
+        contextFilePaths:
+            cur.contextFilePaths.where((p) => p != filePath).toList(),
+      ),
     );
   }
 
-  void clearChat() {
-    state = const ChatState();
+  void clearCurrentChat() {
+    state = state.withUpdatedCurrent(
+      state.current.copyWith(messages: [], contextFilePaths: []),
+    );
+    _persist();
   }
+
+  // ── Send message ─────────────────────────────────────────────────────────
 
   Future<void> sendMessage(String text) async {
     if (!state.canSend || text.trim().isEmpty) return;
@@ -64,14 +159,17 @@ class ChatNotifier extends Notifier<ChatState> {
       baseUrl: settings.baseUrl,
     );
 
-    // Build context string from attached files
-    final contextPaths = List<String>.from(state.contextFilePaths);
+    final cur = state.current;
+    final contextPaths = List<String>.from(cur.contextFilePaths);
     String contextPrefix = '';
 
     if (contextPaths.isNotEmpty) {
       final buffer = StringBuffer('以下是用户提供的参考文件：\n\n');
       for (final path in contextPaths) {
-        final content = await FileService.instance.readFileSafe(path);
+        // Route to PDF text extraction or plain text read
+        final content = path.toLowerCase().endsWith('.pdf')
+            ? await FileService.instance.extractPdfText(path)
+            : await FileService.instance.readFileSafe(path);
         final name = path.split(RegExp(r'[/\\]')).last;
         if (content != null) {
           buffer.writeln('--- $name ---');
@@ -82,7 +180,8 @@ class ChatNotifier extends Notifier<ChatState> {
       contextPrefix = buffer.toString();
     }
 
-    final userContent = contextPrefix.isEmpty ? text : '$contextPrefix用户问题：$text';
+    final userContent =
+        contextPrefix.isEmpty ? text : '$contextPrefix用户问题：$text';
 
     final userMsg = ChatMessage(
       id: _uuid.v4(),
@@ -91,9 +190,8 @@ class ChatNotifier extends Notifier<ChatState> {
       contextFilePaths: contextPaths,
     );
 
-    // Build full history for API (include context in hidden first user msg if needed)
     final apiHistory = [
-      ...state.messages.map((m) => ChatMessage(
+      ...cur.messages.map((m) => ChatMessage(
             id: m.id,
             role: m.role,
             content: m.content,
@@ -109,28 +207,35 @@ class ChatNotifier extends Notifier<ChatState> {
       isStreaming: true,
     );
 
-    state = state.copyWith(
-      messages: [...state.messages, userMsg, assistantMsg],
-      contextFilePaths: [],
-      isStreaming: true,
+    state = state.withUpdatedCurrent(
+      cur.copyWith(
+        messages: [...cur.messages, userMsg, assistantMsg],
+        contextFilePaths: [],
+        isStreaming: true,
+      ),
     );
 
     try {
       await for (final delta in qwen.chatStream(apiHistory)) {
-        final msgs = state.messages.map((m) {
+        final current = state.current;
+        final msgs = current.messages.map((m) {
           if (m.id == assistantId) {
             return m.copyWith(content: m.content + delta);
           }
           return m;
         }).toList();
-        state = state.copyWith(messages: msgs);
+        state = state.withUpdatedCurrent(current.copyWith(messages: msgs));
       }
     } finally {
-      final msgs = state.messages.map((m) {
+      final current = state.current;
+      final msgs = current.messages.map((m) {
         if (m.id == assistantId) return m.copyWith(isStreaming: false);
         return m;
       }).toList();
-      state = state.copyWith(messages: msgs, isStreaming: false);
+      state = state.withUpdatedCurrent(
+        current.copyWith(messages: msgs, isStreaming: false),
+      );
+      _persist();
     }
   }
 }

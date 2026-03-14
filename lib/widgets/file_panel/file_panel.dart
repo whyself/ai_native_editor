@@ -7,6 +7,7 @@ import '../../models/drag_payload.dart';
 import '../../models/pane_node.dart';
 import '../../models/workspace_file.dart';
 import '../../providers/pane_tree_provider.dart';
+import '../../providers/settings_provider.dart';
 import '../../providers/workspace_provider.dart';
 import '../../services/file_service.dart';
 import '../../theme/app_colors.dart';
@@ -36,9 +37,12 @@ class FilePanel extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final files = ref.watch(workspaceProvider);
     final paneTree = ref.watch(paneTreeProvider);
+    final settings = ref.watch(settingsProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textSecondary =
         isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
+    final textMuted =
+        isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted;
     final borderColor =
         isDark ? AppColors.darkBorderSubtle : AppColors.lightBorderSubtle;
 
@@ -71,6 +75,9 @@ class FilePanel extends ConsumerWidget {
                 ),
               ),
               const Spacer(),
+              // Set default save directory button
+              _SaveDirButton(isDark: isDark),
+              const SizedBox(width: AppTheme.sp2),
               // New file button
               _NewFileButton(isDark: isDark),
               const SizedBox(width: AppTheme.sp4),
@@ -79,6 +86,31 @@ class FilePanel extends ConsumerWidget {
             ],
           ),
         ),
+
+        // Current save dir subtitle
+        if (settings.defaultSaveDir != null)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(
+                horizontal: AppTheme.sp12, vertical: 2),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: borderColor)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.save_outlined, size: 11, color: textMuted),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    settings.defaultSaveDir!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 10, color: textMuted),
+                  ),
+                ),
+              ],
+            ),
+          ),
 
         // File list
         Expanded(
@@ -102,6 +134,39 @@ class FilePanel extends ConsumerWidget {
                 ),
         ),
       ],
+    );
+  }
+}
+
+// ---- Save Directory Button ----
+
+class _SaveDirButton extends ConsumerWidget {
+  final bool isDark;
+  const _SaveDirButton({required this.isDark});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hasDir = ref.watch(settingsProvider).defaultSaveDir != null;
+    final color = hasDir
+        ? (isDark ? AppColors.darkPrimary : AppColors.lightPrimary)
+        : (isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary);
+    return Tooltip(
+      message: hasDir ? '更改新文件保存目录' : '设置新文件保存目录',
+      child: InkWell(
+        onTap: () async {
+          final picked = await FilePicker.platform.getDirectoryPath();
+          if (picked != null) {
+            ref.read(settingsProvider.notifier).save(defaultSaveDir: picked);
+          }
+        },
+        borderRadius: BorderRadius.circular(AppTheme.radius4),
+        child: Container(
+          width: 32,
+          height: 32,
+          alignment: Alignment.center,
+          child: Icon(Icons.drive_folder_upload_outlined, size: 18, color: color),
+        ),
+      ),
     );
   }
 }
@@ -143,9 +208,16 @@ class _NewFileButton extends ConsumerWidget {
     final name =
         filename.trim().endsWith('.md') ? filename.trim() : '${filename.trim()}.md';
 
-    // 2. 保存到应用文档目录（无需任何 Android 权限，始终可写）
-    final docsDir = await getApplicationDocumentsDirectory();
-    final finalPath = p.join(docsDir.path, name);
+    // 2. Determine save directory: use user-configured dir, or fall back to app docs
+    final settings = ref.read(settingsProvider);
+    final String saveDir;
+    if (settings.defaultSaveDir != null) {
+      saveDir = settings.defaultSaveDir!;
+    } else {
+      final docsDir = await getApplicationDocumentsDirectory();
+      saveDir = docsDir.path;
+    }
+    final finalPath = p.join(saveDir, name);
 
     // 3. Write default content
     const defaultContent = '# 新文档\n\n';
@@ -226,8 +298,11 @@ class _NewFileButton extends ConsumerWidget {
                       ? AppColors.darkTextMuted
                       : AppColors.lightTextMuted),
               suffixText: '.md',
-              suffixStyle:
-                  TextStyle(fontSize: 13, color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted),
+              suffixStyle: TextStyle(
+                  fontSize: 13,
+                  color: isDark
+                      ? AppColors.darkTextMuted
+                      : AppColors.lightTextMuted),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(AppTheme.radius8),
                 borderSide: BorderSide(color: borderColor),
@@ -282,7 +357,7 @@ class _AddFileButton extends ConsumerWidget {
           final result = await FilePicker.platform.pickFiles(
             allowMultiple: true,
             type: FileType.custom,
-            allowedExtensions: ['md', 'markdown', 'txt'],
+            allowedExtensions: ['md', 'markdown', 'txt', 'pdf'],
           );
           if (result != null) {
             final paths = result.paths.whereType<String>().toList();
@@ -424,6 +499,12 @@ class _ItemContentState extends State<_ItemContent> {
         widget.isDark ? AppColors.darkPrimary : AppColors.lightPrimary;
     final openBg = primary.withOpacity(0.08);
 
+    // Choose icon based on file extension
+    final ext = widget.file.name.split('.').last.toLowerCase();
+    final fileIcon = ext == 'pdf'
+        ? Icons.picture_as_pdf_outlined
+        : Icons.description_outlined;
+
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: widget.onOpen,
@@ -449,7 +530,7 @@ class _ItemContentState extends State<_ItemContent> {
           child: Row(
             children: [
               Icon(
-                Icons.description_outlined,
+                fileIcon,
                 size: 14,
                 color: widget.isOpen
                     ? primary

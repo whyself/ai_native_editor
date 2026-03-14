@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/layout_provider.dart';
+import '../../providers/pane_tree_provider.dart';
+import '../../providers/workspace_provider.dart';
+import '../../services/persistence_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_theme.dart';
 import '../ai_panel/ai_panel.dart';
@@ -137,6 +140,18 @@ class _TopBar extends ConsumerWidget {
               ),
             ),
           ),
+          // Trash button: clear workspace + pane tree
+          Tooltip(
+            message: '清空工作区与编辑器',
+            child: _ToolbarBtn(
+              icon: Icons.delete_sweep_outlined,
+              tooltip: '清空工作区',
+              isActive: false,
+              isDark: isDark,
+              onTap: () => _confirmClear(context, ref),
+            ),
+          ),
+          const SizedBox(width: AppTheme.sp4),
           // Right panel toggle
           _ToolbarBtn(
             icon: Icons.smart_toy_outlined,
@@ -148,6 +163,56 @@ class _TopBar extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  void _confirmClear(BuildContext context, WidgetRef ref) {
+    final isDarkLocal = isDark;
+    showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDarkLocal
+            ? AppColors.darkSurface2
+            : AppColors.lightSurface2,
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Text(
+          '清空工作区',
+          style: TextStyle(
+            color: isDarkLocal
+                ? AppColors.darkTextPrimary
+                : AppColors.lightTextPrimary,
+          ),
+        ),
+        content: Text(
+          '将关闭所有已打开文件并清空工作区列表。此操作不可撤销。\n\n（AI 对话与设置不受影响）',
+          style: TextStyle(
+            color: isDarkLocal
+                ? AppColors.darkTextSecondary
+                : AppColors.lightTextSecondary,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('清空'),
+          ),
+        ],
+      ),
+    ).then((confirmed) async {
+      if (confirmed == true) {
+        ref.read(workspaceProvider.notifier).clearAll();
+        ref.read(paneTreeProvider.notifier).reset();
+        await PersistenceService.instance.clearWorkspaceAndPaneTree();
+      }
+    });
   }
 }
 

@@ -12,6 +12,11 @@ class WorkspaceFile {
     return WorkspaceFile(path: path, name: name);
   }
 
+  Map<String, dynamic> toJson() => {'path': path};
+
+  factory WorkspaceFile.fromJson(Map<String, dynamic> json) =>
+      WorkspaceFile.fromPath(json['path'] as String);
+
   @override
   bool operator ==(Object other) => other is WorkspaceFile && other.path == path;
 

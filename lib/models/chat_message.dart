@@ -29,4 +29,24 @@ class ChatMessage {
         contextFilePaths: contextFilePaths,
         isStreaming: isStreaming ?? this.isStreaming,
       );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'role': role.name,
+        'content': content,
+        'contextFilePaths': contextFilePaths,
+        // isStreaming intentionally omitted — always false on restore
+      };
+
+  factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
+        id: json['id'] as String,
+        role: MessageRole.values.firstWhere(
+          (r) => r.name == json['role'],
+          orElse: () => MessageRole.user,
+        ),
+        content: json['content'] as String,
+        contextFilePaths:
+            List<String>.from(json['contextFilePaths'] as List? ?? []),
+      );
 }
+

@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../services/persistence_service.dart';
 
 class LayoutState {
   final double leftWidth;
@@ -32,14 +33,46 @@ class LayoutState {
         leftVisible: leftVisible ?? this.leftVisible,
         rightVisible: rightVisible ?? this.rightVisible,
       );
+
+  Map<String, dynamic> toJson() => {
+        'leftWidth': leftWidth,
+        'rightWidth': rightWidth,
+        'leftVisible': leftVisible,
+        'rightVisible': rightVisible,
+      };
+
+  factory LayoutState.fromJson(Map<String, dynamic> json) => LayoutState(
+        leftWidth: (json['leftWidth'] as num?)?.toDouble() ?? defaultLeftWidth,
+        rightWidth:
+            (json['rightWidth'] as num?)?.toDouble() ?? defaultRightWidth,
+        leftVisible: json['leftVisible'] as bool? ?? true,
+        rightVisible: json['rightVisible'] as bool? ?? true,
+      );
 }
 
 class LayoutNotifier extends Notifier<LayoutState> {
   @override
-  LayoutState build() => const LayoutState();
+  LayoutState build() {
+    final saved = PersistenceService.instance.loadLayout();
+    if (saved != null) {
+      return LayoutState.fromJson(saved);
+    }
+    return const LayoutState();
+  }
 
-  void toggleLeft() => state = state.copyWith(leftVisible: !state.leftVisible);
-  void toggleRight() => state = state.copyWith(rightVisible: !state.rightVisible);
+  void _persist() {
+    PersistenceService.instance.saveLayout(state.toJson());
+  }
+
+  void toggleLeft() {
+    state = state.copyWith(leftVisible: !state.leftVisible);
+    _persist();
+  }
+
+  void toggleRight() {
+    state = state.copyWith(rightVisible: !state.rightVisible);
+    _persist();
+  }
 
   void resizeLeft(double delta) {
     final newWidth = (state.leftWidth + delta).clamp(
@@ -47,6 +80,7 @@ class LayoutNotifier extends Notifier<LayoutState> {
       LayoutState.maxLeftWidth,
     );
     state = state.copyWith(leftWidth: newWidth);
+    _persist();
   }
 
   void resizeRight(double delta) {
@@ -55,6 +89,7 @@ class LayoutNotifier extends Notifier<LayoutState> {
       LayoutState.maxRightWidth,
     );
     state = state.copyWith(rightWidth: newWidth);
+    _persist();
   }
 }
 
