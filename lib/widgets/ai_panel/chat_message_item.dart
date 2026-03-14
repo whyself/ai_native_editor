@@ -32,7 +32,10 @@ class ChatMessageItem extends StatelessWidget {
               runSpacing: 4,
               alignment: WrapAlignment.end,
               children: message.contextFilePaths.map((path) {
-                final name = path.split(RegExp(r'[/\\]')).last;
+                final rawName = path.split(RegExp(r'[/\\]')).last;
+                final name = rawName.length > 18
+                    ? '${rawName.substring(0, 15)}…'
+                    : rawName;
                 return Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 3),

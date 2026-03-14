@@ -16,7 +16,9 @@ class ContextFileChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = filePath.split(RegExp(r'[/\\]')).last;
+    final rawName = filePath.split(RegExp(r'[/\\]')).last;
+    // Truncate at string level to prevent layout overflow in narrow panels
+    final name = rawName.length > 18 ? '${rawName.substring(0, 15)}…' : rawName;
     final primary = isDark ? AppColors.darkPrimary : AppColors.lightPrimary;
     final bg = isDark
         ? AppColors.darkPrimary.withOpacity(0.12)
@@ -37,17 +39,7 @@ class ContextFileChip extends StatelessWidget {
         children: [
           Icon(Icons.description_outlined, size: 12, color: primary),
           const SizedBox(width: 4),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 160),
-            child: Text(
-              name,
-              style: TextStyle(
-                fontSize: 12,
-                color: primary,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ),
+          Text(name, style: TextStyle(fontSize: 12, color: primary)),
           const SizedBox(width: 4),
           GestureDetector(
             onTap: onRemove,

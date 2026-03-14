@@ -48,17 +48,37 @@ class _MarkdownPreviewState extends ConsumerState<MarkdownPreview> {
   /// Content loaded from disk — used as fallback when no live draft exists.
   String _diskContent = '';
   bool _loading = true;
+  late final ScrollController _scrollController;
+  bool _syncingScroll = false; // prevents feedback loop with editor pane
 
   @override
   void initState() {
     super.initState();
+    _scrollController = ScrollController();
+    _scrollController.addListener(_onScrollChanged);
     _loadFile();
+  }
+
+  void _onScrollChanged() {
+    if (_syncingScroll) return;
+    if (!_scrollController.hasClients) return;
+    final max = _scrollController.position.maxScrollExtent;
+    if (max <= 0) return;
+    final fraction = _scrollController.offset / max;
+    ref.read(scrollSyncProvider(widget.filePath).notifier).state = fraction;
   }
 
   @override
   void didUpdateWidget(MarkdownPreview old) {
     super.didUpdateWidget(old);
     if (old.filePath != widget.filePath) _loadFile();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScrollChanged);
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadFile() async {
@@ -142,6 +162,19 @@ class _MarkdownPreviewState extends ConsumerState<MarkdownPreview> {
 
   @override
   Widget build(BuildContext context) {
+    // ── Respond to scroll sync from editor pane ───────────────────────────
+    ref.listen<double>(scrollSyncProvider(widget.filePath), (_, fraction) {
+      if (_syncingScroll) return;
+      if (!_scrollController.hasClients) return;
+      final max = _scrollController.position.maxScrollExtent;
+      if (max <= 0) return;
+      final target = (max * fraction).clamp(0.0, max);
+      if ((target - _scrollController.offset).abs() < 1.0) return;
+      _syncingScroll = true;
+      _scrollController.jumpTo(target);
+      _syncingScroll = false;
+    });
+
     final bgColor =
         widget.isDark ? AppColors.darkBackground : AppColors.lightBackground;
     final primary =
@@ -166,6 +199,7 @@ class _MarkdownPreviewState extends ConsumerState<MarkdownPreview> {
         // Key includes content hash so the scroll position resets on file
         // switch but NOT on every live-content update (avoids scroll jump).
         key: ValueKey(widget.filePath),
+        controller: _scrollController,
         data: content,
         styleSheet: _buildStyleSheet(widget.isDark),
         padding: const EdgeInsets.all(AppTheme.sp24),

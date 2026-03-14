@@ -496,7 +496,7 @@ class _EmptyChat extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                   color: textMuted)),
           const SizedBox(height: AppTheme.sp8),
-          Text('从文件列表拖入文件，或点击 + 添加上下文',
+          Text('从文件列表拖入，或点 + 添加上下文\nPDF 和文本文件内容将自动提取并附加',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13, color: textMuted)),
         ],
@@ -744,15 +744,13 @@ class _ModelSelector extends ConsumerWidget {
         value: kAvailableModels.contains(settings.model)
             ? settings.model
             : kAvailableModels.first,
-        items: kAvailableModels
-            .map(
-              (m) => DropdownMenuItem(
-                value: m,
-                child: Text(m,
-                    style: TextStyle(fontSize: 12, color: textSecondary)),
-              ),
-            )
-            .toList(),
+        items: kAvailableModels.map((m) {
+          return DropdownMenuItem(
+            value: m,
+            child: Text(m,
+                style: TextStyle(fontSize: 12, color: textSecondary)),
+          );
+        }).toList(),
         onChanged: (model) {
           if (model != null) {
             ref.read(settingsProvider.notifier).save(model: model);

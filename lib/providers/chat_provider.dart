@@ -171,43 +171,14 @@ class ChatNotifier extends Notifier<ChatState> {
       state = state.withUpdatedCurrent(cur);
     }
     final contextPaths = List<String>.from(cur.contextFilePaths);
-    String contextPrefix = '';
-
-    if (contextPaths.isNotEmpty) {
-      final buffer = StringBuffer('以下是用户提供的参考文件：\n\n');
-      for (final path in contextPaths) {
-        // Route to PDF text extraction or plain text read
-        final content = path.toLowerCase().endsWith('.pdf')
-            ? await FileService.instance.extractPdfText(path)
-            : await FileService.instance.readFileSafe(path);
-        final name = path.split(RegExp(r'[/\\]')).last;
-        if (content != null) {
-          buffer.writeln('--- $name ---');
-          buffer.writeln(content);
-          buffer.writeln();
-        }
-      }
-      contextPrefix = buffer.toString();
-    }
-
-    final userContent =
-        contextPrefix.isEmpty ? text : '$contextPrefix用户问题：$text';
+    final previousMessages = List<ChatMessage>.from(cur.messages);
 
     final userMsg = ChatMessage(
       id: _uuid.v4(),
       role: MessageRole.user,
-      content: text, // display only the user's actual text
+      content: text,
       contextFilePaths: contextPaths,
     );
-
-    final apiHistory = [
-      ...cur.messages.map((m) => ChatMessage(
-            id: m.id,
-            role: m.role,
-            content: m.content,
-          )),
-      ChatMessage(id: userMsg.id, role: MessageRole.user, content: userContent),
-    ];
 
     final assistantId = _uuid.v4();
     final assistantMsg = ChatMessage(
@@ -217,6 +188,7 @@ class ChatNotifier extends Notifier<ChatState> {
       isStreaming: true,
     );
 
+    // ① Show user bubble + loading indicator immediately – UI stays responsive
     state = state.withUpdatedCurrent(
       cur.copyWith(
         messages: [...cur.messages, userMsg, assistantMsg],
@@ -226,6 +198,38 @@ class ChatNotifier extends Notifier<ChatState> {
     );
 
     try {
+      // ② Extract file content in background (compute() keeps UI thread free)
+      String contextPrefix = '';
+      if (contextPaths.isNotEmpty) {
+        final buffer = StringBuffer('以下是用户提供的参考文件：\n\n');
+        for (final path in contextPaths) {
+          final content = path.toLowerCase().endsWith('.pdf')
+              ? await FileService.instance.extractPdfText(path)
+              : await FileService.instance.readFileSafe(path);
+          final name = path.split(RegExp(r'[/\\]')).last;
+          if (content != null) {
+            buffer.writeln('--- $name ---');
+            buffer.writeln(content);
+            buffer.writeln();
+          }
+        }
+        contextPrefix = buffer.toString();
+      }
+
+      final userContent =
+          contextPrefix.isEmpty ? text : '$contextPrefix用户问题：$text';
+
+      final apiHistory = [
+        ...previousMessages.map((m) => ChatMessage(
+              id: m.id,
+              role: m.role,
+              content: m.content,
+            )),
+        ChatMessage(
+            id: userMsg.id, role: MessageRole.user, content: userContent),
+      ];
+
+      // ③ Stream API response
       await for (final delta in qwen.chatStream(apiHistory)) {
         final current = state.current;
         final msgs = current.messages.map((m) {

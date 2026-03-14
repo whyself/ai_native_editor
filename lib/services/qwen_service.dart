@@ -18,6 +18,8 @@ class QwenService {
 
   bool get isConfigured => apiKey.isNotEmpty;
 
+  // ── Chat stream ───────────────────────────────────────────────────────────
+
   /// Returns a stream of text delta chunks from the model.
   Stream<String> chatStream(List<ChatMessage> history) async* {
     if (!isConfigured) {
@@ -58,7 +60,8 @@ class QwenService {
           if (data == '[DONE]') return;
           try {
             final json = jsonDecode(data) as Map<String, dynamic>;
-            final delta = json['choices']?[0]?['delta']?['content'] as String?;
+            final delta =
+                json['choices']?[0]?['delta']?['content'] as String?;
             if (delta != null && delta.isNotEmpty) yield delta;
           } catch (_) {
             // Skip malformed chunks

@@ -40,6 +40,7 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
   late final ScrollController _editorScrollController;
   late final ScrollController _lineNumberController;
   bool _loaded = false;
+  bool _syncingScroll = false; // prevents feedback loop with preview pane
 
   // ── Simple debounced undo stack ──────────────────────────────────────────
   final List<String> _undoHistory = [];
@@ -69,6 +70,18 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
     final offset = _editorScrollController.offset;
     final max = _lineNumberController.position.maxScrollExtent;
     _lineNumberController.jumpTo(offset.clamp(0.0, max));
+
+    // Notify preview pane (only when user is scrolling, not when we're
+    // responding to an incoming sync from the preview pane).
+    if (!_syncingScroll) {
+      final editorMax = _editorScrollController.position.maxScrollExtent;
+      if (editorMax > 0) {
+        final fraction = offset / editorMax;
+        ref
+            .read(scrollSyncProvider(widget.filePath).notifier)
+            .state = fraction;
+      }
+    }
   }
 
   @override
@@ -168,6 +181,19 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
 
   @override
   Widget build(BuildContext context) {
+    // ── Respond to scroll sync from preview pane ──────────────────────────
+    ref.listen<double>(scrollSyncProvider(widget.filePath), (_, fraction) {
+      if (_syncingScroll) return;
+      if (!_editorScrollController.hasClients) return;
+      final max = _editorScrollController.position.maxScrollExtent;
+      if (max <= 0) return;
+      final target = (max * fraction).clamp(0.0, max);
+      if ((target - _editorScrollController.offset).abs() < 1.0) return;
+      _syncingScroll = true;
+      _editorScrollController.jumpTo(target);
+      _syncingScroll = false;
+    });
+
     final bgColor =
         widget.isDark ? AppColors.darkBackground : AppColors.lightBackground;
     final textColor =
